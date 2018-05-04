@@ -1,31 +1,43 @@
 #!/usr/bin/env python3
+import os
 import re
 import subprocess
 import sys
 import tempfile
 import urllib.request
+from urllib.error import URLError
 
 import yaml
 from bs4 import BeautifulSoup
 
 
 def init() -> None:
-    password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+    basic_auth_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'basic_auth.yaml')
 
-    with open('basic_auth.yaml') as f:
-        for auth in yaml.load(f):
-            password_mgr.add_password(**auth)
+    if os.path.exists(basic_auth_path):
+        password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
 
-    handler = urllib.request.HTTPBasicAuthHandler(password_mgr)
-    opener = urllib.request.build_opener(handler)
-    urllib.request.install_opener(opener)
+        with open(basic_auth_path) as f:
+            for auth in yaml.load(f):
+                password_mgr.add_password(**auth)
+
+        handler = urllib.request.HTTPBasicAuthHandler(password_mgr)
+        opener = urllib.request.build_opener(handler)
+        urllib.request.install_opener(opener)
 
 
 def read_doc(url_or_path: str) -> str:
     try:
         f = urllib.request.urlopen(url_or_path)
+    except URLError as e:
+        print('Could not open "{}": {}'.format(url_or_path, e.reason))
+        exit(1)
     except ValueError:
-        f = open(url_or_path)
+        try:
+            f = open(url_or_path)
+        except FileNotFoundError as e:
+            print('Could not open "{}": {}'.format(url_or_path, e.args[1]))
+            exit(1)
 
     soup = BeautifulSoup(f.read(), 'html5lib')
 
@@ -38,6 +50,10 @@ def read_doc(url_or_path: str) -> str:
 
 
 def main() -> None:
+    if len(sys.argv) != 3:
+        print("Usage: {} [url-or-path] [url-or-path]".format(sys.argv[0]))
+        exit(1)
+
     init()
 
     doc_a = read_doc(sys.argv[1])
